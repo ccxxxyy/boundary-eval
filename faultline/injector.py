@@ -18,9 +18,9 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
-from .errors import GatewayTimeout, HarnessViolation, SimulatedCrash
+from .errors import HarnessViolation, SimulatedCrash
 from .faults import TIMEOUT_VARIANTS, AttemptFault, Schedule
-from .world import MUTATING_OPS, Event, GatewayState, StoreState, World, _OpBudgetExceeded
+from .world import Event, OpBudgetExceeded, World
 
 
 # Safety valve for solutions that perform an unreasonable number of durable
@@ -30,14 +30,23 @@ MAX_CRASH_POINTS_PER_ATTEMPT = 32
 
 
 class Task(Protocol):
+    """What a task module must provide. Nothing here mentions a specific
+    service, so a task can introduce new outside systems without the injector
+    changing."""
+
     TASK_ID: str
-    ENTRYPOINT: str
 
-    def invoke(self, world: World, solution: Any) -> Any: ...
+    def new_durable_state(self) -> Any:
+        """Fresh state that will survive crashes for the length of one trace."""
 
-    def check(
-        self, store_state: StoreState, gateway_state: GatewayState, returned: Any
-    ) -> list[str]: ...
+    def invoke(self, world: World, solution: Any) -> Any:
+        """Build the service facades and call the solution's entrypoint."""
+
+    def check(self, durable: Any, returned: Any) -> list[str]:
+        """Return a human-readable violation for each invariant that broke."""
+
+    def describe_state(self, durable: Any) -> list[str]:
+        """Lines summarising final state, printed with a counterexample."""
 
 
 @dataclass
@@ -70,8 +79,8 @@ class AttemptResult:
 @dataclass
 class TraceResult:
     attempts: tuple[AttemptResult, ...]
-    store_state: StoreState
-    gateway_state: GatewayState
+    durable: Any
+    state_lines: list[str] = field(default_factory=list)
     violations: list[str] = field(default_factory=list)
 
     @property
@@ -85,15 +94,7 @@ class TraceResult:
     def render(self) -> str:
         lines = [f"trace with {len(self.attempts)} attempt(s):"]
         lines.extend(a.render(i) for i, a in enumerate(self.attempts, start=1))
-        lines.append("  final durable store: " + repr(self.store_state.data))
-        charges = self.gateway_state.charge_list()
-        lines.append(
-            "  charges on the gateway: "
-            + (
-                ", ".join(f"{c.charge_id}({c.amount_cents}, key={c.idempotency_key})" for c in charges)
-                or "none"
-            )
-        )
+        lines.extend(f"  {line}" for line in self.state_lines)
         for violation in self.violations:
             lines.append(f"  VIOLATION: {violation}")
         return "\n".join(lines)
@@ -129,13 +130,12 @@ class EvalResult:
 def _run_attempt(
     task: Task,
     make_solution: Callable[[], Any],
-    store_state: StoreState,
-    gateway_state: GatewayState,
+    durable: Any,
     fault: AttemptFault,
     attempt_index: int,
     op_budget: int,
 ) -> AttemptResult:
-    world = World(store_state, gateway_state, fault, attempt_index, op_budget)
+    world = World(durable, fault, attempt_index, op_budget)
     crashed = False
     ack_lost = False
     returned: Any = None
@@ -145,7 +145,7 @@ def _run_attempt(
     try:
         # Fresh module namespace: the previous attempt's process is gone.
         returned = task.invoke(world, make_solution())
-    except _OpBudgetExceeded as exc:
+    except OpBudgetExceeded as exc:
         error = exc
     except SimulatedCrash:
         crashed = True
@@ -172,7 +172,7 @@ def _run_attempt(
         fault=fault,
         events=world.events,
         op_count=world.op_index,
-        mutating_indices=[e.op_index for e in world.events if e.kind in MUTATING_OPS],
+        mutating_indices=list(world.mutating_indices),
         crashed=crashed,
         ack_lost=ack_lost,
         returned=returned,
@@ -181,10 +181,8 @@ def _run_attempt(
     )
 
 
-def _violations(
-    task: Task, store: StoreState, gateway: GatewayState, final: AttemptResult
-) -> list[str]:
-    if isinstance(final.error, _OpBudgetExceeded):
+def _violations(task: Task, durable: Any, final: AttemptResult) -> list[str]:
+    if isinstance(final.error, OpBudgetExceeded):
         return [f"the handler never finished: {final.error}"]
     if final.swallowed_crash:
         return [str(final.error)]
@@ -193,7 +191,16 @@ def _violations(
             f"the handler raised {type(final.error).__name__} on an attempt that was "
             f"allowed to complete: {final.error}"
         ]
-    return task.check(store, gateway, final.returned)
+    return task.check(durable, final.returned)
+
+
+def _trace(task: Task, attempts: tuple[AttemptResult, ...], durable: Any) -> TraceResult:
+    return TraceResult(
+        attempts=attempts,
+        durable=durable,
+        state_lines=task.describe_state(durable),
+        violations=_violations(task, durable, attempts[-1]),
+    )
 
 
 def run_schedule(
@@ -204,21 +211,17 @@ def run_schedule(
 ) -> TraceResult:
     """Run one specific fault schedule. Used by the public self-check and to
     replay a counterexample on demand."""
-    store, gateway = StoreState(), GatewayState()
+    durable = task.new_durable_state()
     attempts: list[AttemptResult] = []
     for index, fault in enumerate(schedule.attempts, start=1):
-        attempts.append(
-            _run_attempt(task, make_solution, store, gateway, fault, index, op_budget)
-        )
-    trace = TraceResult(tuple(attempts), store, gateway)
-    trace.violations = _violations(task, store, gateway, attempts[-1])
-    return trace
+        attempts.append(_run_attempt(task, make_solution, durable, fault, index, op_budget))
+    return _trace(task, tuple(attempts), durable)
 
 
 def _trace_signature(attempts: tuple[AttemptResult, ...]) -> tuple:
     """Canonical identity of a trace, used to drop schedules that differ on
     paper but produce an identical execution (for example a timeout aimed at a
-    charge call the solution never makes)."""
+    remote call the solution never makes)."""
     return tuple(
         (i, e.kind, e.detail, e.outcome)
         for i, attempt in enumerate(attempts)
@@ -241,20 +244,19 @@ def explore(
     seen: set[tuple] = set()
     counters: dict[str, Any] = {"traces": 0, "exhausted": False, "truncated": False}
 
-    def record(attempts: tuple[AttemptResult, ...], store: StoreState, gateway: GatewayState) -> None:
+    def record(attempts: tuple[AttemptResult, ...], durable: Any) -> None:
         signature = _trace_signature(attempts)
         if signature in seen:
             return
         seen.add(signature)
         counters["traces"] += 1
 
-        violations = _violations(task, store, gateway, attempts[-1])
-        if violations:
-            failures.append(TraceResult(attempts, store, gateway, violations))
+        trace = _trace(task, attempts, durable)
+        if not trace.passed:
+            failures.append(trace)
 
     def recurse(
-        store_state: StoreState,
-        gateway_state: GatewayState,
+        durable_state: Any,
         history: tuple[AttemptResult, ...],
         crashes_left: int,
     ) -> None:
@@ -262,12 +264,12 @@ def explore(
             return
 
         for timeouts in TIMEOUT_VARIANTS:
-            store, gateway = copy.deepcopy(store_state), copy.deepcopy(gateway_state)
-            fault = AttemptFault(crash_before_op=None, charge_timeouts=timeouts)
+            durable = copy.deepcopy(durable_state)
+            fault = AttemptFault(crash_before_op=None, remote_timeouts=timeouts)
             result = _run_attempt(
-                task, make_solution, store, gateway, fault, len(history) + 1, op_budget
+                task, make_solution, durable, fault, len(history) + 1, op_budget
             )
-            record(history + (result,), store, gateway)
+            record(history + (result,), durable)
             if counters["traces"] >= trace_budget:
                 counters["exhausted"] = True
                 return
@@ -276,17 +278,15 @@ def explore(
             return
 
         for timeouts in TIMEOUT_VARIANTS:
-            probe_store, probe_gateway = copy.deepcopy(store_state), copy.deepcopy(gateway_state)
             probe = _run_attempt(
                 task,
                 make_solution,
-                probe_store,
-                probe_gateway,
-                AttemptFault(crash_before_op=None, charge_timeouts=timeouts),
+                copy.deepcopy(durable_state),
+                AttemptFault(crash_before_op=None, remote_timeouts=timeouts),
                 len(history) + 1,
                 op_budget,
             )
-            if isinstance(probe.error, _OpBudgetExceeded):
+            if isinstance(probe.error, OpBudgetExceeded):
                 # A runaway solution would otherwise contribute one crash point
                 # per spin. It has already been recorded as a failure by the
                 # terminal loop above, so stop descending into it.
@@ -298,24 +298,24 @@ def explore(
                 crash_points = crash_points[:MAX_CRASH_POINTS_PER_ATTEMPT]
 
             for point in crash_points:
-                store, gateway = copy.deepcopy(store_state), copy.deepcopy(gateway_state)
-                fault = AttemptFault(crash_before_op=point, charge_timeouts=timeouts)
+                durable = copy.deepcopy(durable_state)
+                fault = AttemptFault(crash_before_op=point, remote_timeouts=timeouts)
                 result = _run_attempt(
-                    task, make_solution, store, gateway, fault, len(history) + 1, op_budget
+                    task, make_solution, durable, fault, len(history) + 1, op_budget
                 )
                 if result.swallowed_crash:
                     # The solution caught the crash and carried on instead of
                     # dying. There is no next attempt to descend into, and it
                     # must not be silently dropped either.
-                    record(history + (result,), store, gateway)
+                    record(history + (result,), durable)
                     continue
                 if not result.crashed:
                     continue
-                recurse(store, gateway, history + (result,), crashes_left - 1)
+                recurse(durable, history + (result,), crashes_left - 1)
                 if counters["exhausted"]:
                     return
 
-    recurse(StoreState(), GatewayState(), (), max_crashes)
+    recurse(task.new_durable_state(), (), max_crashes)
 
     return EvalResult(
         task_id=task.TASK_ID,

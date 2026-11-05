@@ -9,12 +9,19 @@ killed, so solution code must never catch it. The injector treats a caught
 """
 
 
-class GatewayTimeout(Exception):
-    """The gateway did not answer in time.
+class RemoteTimeout(Exception):
+    """A remote call did not answer. Its outcome is genuinely unknown: the
+    request may have been applied before the response was lost, or not at
+    all."""
 
-    The outcome of the call is genuinely unknown: the charge may or may not
-    have been created on the gateway side.
-    """
+
+class GatewayTimeout(RemoteTimeout):
+    """The payment gateway did not answer. The charge may or may not exist."""
+
+
+class BrokerTimeout(RemoteTimeout):
+    """The message broker did not answer. The message may or may not have been
+    accepted for delivery."""
 
 
 class SimulatedCrash(BaseException):

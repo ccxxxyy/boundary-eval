@@ -1,4 +1,4 @@
-"""Description of what goes wrong during a single attempt, and during a trace.
+﻿"""Description of what goes wrong during a single attempt, and during a trace.
 
 A *trace* is a sequence of attempts. The queue redelivers the work after every
 crash, so attempt N+1 starts from whatever durable state attempt N left behind.
@@ -12,15 +12,16 @@ from dataclasses import dataclass
 
 # What can happen to an individual `gateway.charge` call within one attempt.
 #   None      - the call succeeds normally
-#   "lost"    - times out and the charge was NOT created
-#   "applied" - times out but the charge WAS created (the ambiguous case)
+#   "lost"    - times out and the request was NOT applied
+#   "applied" - times out but the request WAS applied (the ambiguous outcome)
 TimeoutKind = str
 
 TIMEOUT_VARIANTS: tuple[tuple[tuple[int, TimeoutKind], ...], ...] = (
     (),                      # nothing times out
-    ((0, "applied"),),       # first charge call: ambiguous timeout
-    ((0, "lost"),),          # first charge call: clean timeout
-    ((1, "applied"),),       # second charge call: ambiguous timeout
+    ((0, "applied"),),       # first remote call: ambiguous timeout
+    ((0, "lost"),),          # first remote call: clean timeout
+    ((1, "applied"),),       # second remote call: ambiguous timeout
+    ((1, "lost"),),          # second remote call: clean timeout
 )
 
 
@@ -35,11 +36,11 @@ class AttemptFault:
     """
 
     crash_before_op: int | None = None
-    charge_timeouts: tuple[tuple[int, TimeoutKind], ...] = ()
+    remote_timeouts: tuple[tuple[int, TimeoutKind], ...] = ()
 
-    def timeout_for(self, charge_call_index: int) -> TimeoutKind | None:
-        for index, kind in self.charge_timeouts:
-            if index == charge_call_index:
+    def timeout_for(self, remote_call_index: int) -> TimeoutKind | None:
+        for index, kind in self.remote_timeouts:
+            if index == remote_call_index:
                 return kind
         return None
 
@@ -51,9 +52,13 @@ class AttemptFault:
             parts.append("dies after its last operation, before acknowledging")
         else:
             parts.append(f"crashes before op #{self.crash_before_op}")
-        for index, kind in self.charge_timeouts:
-            label = "timeout, charge WAS created" if kind == "applied" else "timeout, no charge"
-            parts.append(f"charge call #{index}: {label}")
+        for index, kind in self.remote_timeouts:
+            label = (
+                "timeout, but the request WAS applied"
+                if kind == "applied"
+                else "timeout, the request was not applied"
+            )
+            parts.append(f"remote call #{index}: {label}")
         return "; ".join(parts)
 
 

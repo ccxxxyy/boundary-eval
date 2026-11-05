@@ -33,19 +33,19 @@ PUBLIC_SCENARIOS: tuple[tuple[str, Schedule], ...] = (
         Schedule((AttemptFault(crash_before_op=ACK_LOST), AttemptFault())),
     ),
     (
-        "gateway times out and the charge was not created",
-        Schedule((AttemptFault(charge_timeouts=((0, "lost"),)),)),
+        "the first remote call times out and was not applied",
+        Schedule((AttemptFault(remote_timeouts=((0, "lost"),)),)),
     ),
     (
-        "gateway times out but the charge was created",
-        Schedule((AttemptFault(charge_timeouts=((0, "applied"),)),)),
+        "the first remote call times out but was applied",
+        Schedule((AttemptFault(remote_timeouts=((0, "applied"),)),)),
     ),
     (
-        "redelivery, then a gateway timeout on the second attempt",
+        "redelivery, then a remote call times out after being applied",
         Schedule(
             (
                 AttemptFault(crash_before_op=ACK_LOST),
-                AttemptFault(charge_timeouts=((0, "applied"),)),
+                AttemptFault(remote_timeouts=((0, "applied"),)),
             )
         ),
     ),
