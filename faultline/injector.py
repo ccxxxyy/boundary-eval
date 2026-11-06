@@ -173,6 +173,7 @@ def _run_attempt(
     op_budget: int,
 ) -> AttemptResult:
     world = World(durable, fault, attempt_index, op_budget)
+    world.make_solution = make_solution
     crashed = False
     ack_lost = False
     returned: Any = None
@@ -296,6 +297,29 @@ def explore(
         if not trace.passed:
             failures.append(trace)
 
+    takeover_enabled = bool(getattr(task, "TAKEOVER", False))
+
+    def takeover_points(durable_state: Any, history: tuple[AttemptResult, ...]) -> list[int | None]:
+        """Operation indices at which a second worker could be handed the work.
+
+        Only offered on the first attempt. One takeover per trace is enough to
+        expose a fencing bug, and offering it on every redelivery multiplies
+        the search without adding a distinct class of counterexample.
+        """
+        if not takeover_enabled or history:
+            return [None]
+        probe = _run_attempt(
+            task,
+            make_solution,
+            copy.deepcopy(durable_state),
+            AttemptFault(),
+            len(history) + 1,
+            op_budget,
+        )
+        if isinstance(probe.error, OpBudgetExceeded):
+            return [None]
+        return [None, *range(probe.op_count)]
+
     def recurse(
         durable_state: Any,
         history: tuple[AttemptResult, ...],
@@ -304,57 +328,73 @@ def explore(
         if counters["exhausted"]:
             return
 
+        takeovers = takeover_points(durable_state, history)
+
         for timeouts in variants:
-            durable = copy.deepcopy(durable_state)
-            fault = AttemptFault(crash_before_op=None, remote_timeouts=timeouts)
-            result = _run_attempt(
-                task, make_solution, durable, fault, len(history) + 1, op_budget
-            )
-            record(history + (result,), durable)
-            if counters["traces"] >= trace_budget:
-                counters["exhausted"] = True
-                return
+            for takeover in takeovers:
+                durable = copy.deepcopy(durable_state)
+                fault = AttemptFault(
+                    crash_before_op=None,
+                    remote_timeouts=timeouts,
+                    takeover_before_op=takeover,
+                )
+                result = _run_attempt(
+                    task, make_solution, durable, fault, len(history) + 1, op_budget
+                )
+                record(history + (result,), durable)
+                if counters["traces"] >= trace_budget:
+                    counters["exhausted"] = True
+                    return
 
         if crashes_left == 0:
             return
 
         for timeouts in variants:
-            probe = _run_attempt(
-                task,
-                make_solution,
-                copy.deepcopy(durable_state),
-                AttemptFault(crash_before_op=None, remote_timeouts=timeouts),
-                len(history) + 1,
-                op_budget,
-            )
-            if isinstance(probe.error, OpBudgetExceeded):
-                # A runaway solution would otherwise contribute one crash point
-                # per spin. It has already been recorded as a failure by the
-                # terminal loop above, so stop descending into it.
-                continue
-
-            crash_points = [*probe.mutating_indices, probe.op_count]
-            if len(crash_points) > MAX_CRASH_POINTS_PER_ATTEMPT:
-                counters["truncated"] = True
-                crash_points = crash_points[:MAX_CRASH_POINTS_PER_ATTEMPT]
-
-            for point in crash_points:
-                durable = copy.deepcopy(durable_state)
-                fault = AttemptFault(crash_before_op=point, remote_timeouts=timeouts)
-                result = _run_attempt(
-                    task, make_solution, durable, fault, len(history) + 1, op_budget
+            for takeover in takeovers:
+                probe = _run_attempt(
+                    task,
+                    make_solution,
+                    copy.deepcopy(durable_state),
+                    AttemptFault(
+                        crash_before_op=None,
+                        remote_timeouts=timeouts,
+                        takeover_before_op=takeover,
+                    ),
+                    len(history) + 1,
+                    op_budget,
                 )
-                if result.swallowed_crash:
-                    # The solution caught the crash and carried on instead of
-                    # dying. There is no next attempt to descend into, and it
-                    # must not be silently dropped either.
-                    record(history + (result,), durable)
+                if isinstance(probe.error, OpBudgetExceeded):
+                    # A runaway solution would otherwise contribute one crash
+                    # point per spin. It has already been recorded as a failure
+                    # by the terminal loop above, so stop descending into it.
                     continue
-                if not result.crashed:
-                    continue
-                recurse(durable, history + (result,), crashes_left - 1)
-                if counters["exhausted"]:
-                    return
+
+                crash_points = [*probe.mutating_indices, probe.op_count]
+                if len(crash_points) > MAX_CRASH_POINTS_PER_ATTEMPT:
+                    counters["truncated"] = True
+                    crash_points = crash_points[:MAX_CRASH_POINTS_PER_ATTEMPT]
+
+                for point in crash_points:
+                    durable = copy.deepcopy(durable_state)
+                    fault = AttemptFault(
+                        crash_before_op=point,
+                        remote_timeouts=timeouts,
+                        takeover_before_op=takeover,
+                    )
+                    result = _run_attempt(
+                        task, make_solution, durable, fault, len(history) + 1, op_budget
+                    )
+                    if result.swallowed_crash:
+                        # The solution caught the crash and carried on instead
+                        # of dying. There is no next attempt to descend into,
+                        # and it must not be silently dropped either.
+                        record(history + (result,), durable)
+                        continue
+                    if not result.crashed:
+                        continue
+                    recurse(durable, history + (result,), crashes_left - 1)
+                    if counters["exhausted"]:
+                        return
 
     recurse(task.new_durable_state(), (), max_crashes)
 

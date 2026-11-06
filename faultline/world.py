@@ -67,6 +67,17 @@ class World:
         self.mutating_indices: list[int] = []
         self.crash_raised = False
 
+        # Set by a task that models takeover. Called at most once, immediately
+        # before the operation named by `fault.takeover_before_op`, and
+        # expected to run a second worker to completion against the same
+        # durable state.
+        self.takeover_hook: Any = None
+        self.takeover_ran = False
+
+        # Set by the injector so a task that models takeover can build a
+        # second, independent worker from the same solution source.
+        self.make_solution: Any = None
+
     def begin_op(self, kind: str, detail: str, mutating: bool) -> Event:
         """Open a durable or remote operation.
 
@@ -77,6 +88,32 @@ class World:
         """
         if self.op_index >= self.op_budget:
             raise OpBudgetExceeded(f"more than {self.op_budget} operations without finishing")
+
+        if (
+            self.takeover_hook is not None
+            and not self.takeover_ran
+            and self.fault.takeover_before_op == self.op_index
+        ):
+            # This worker is merely slow, not dead. Another one is handed the
+            # same work, runs it to completion, and then this one resumes.
+            self.takeover_ran = True
+            self.events.append(
+                Event(
+                    op_index=self.op_index,
+                    kind="-- TAKEOVER --",
+                    detail="the queue hands this work to a second worker",
+                    outcome="the second worker runs to completion below",
+                )
+            )
+            self.takeover_hook()
+            self.events.append(
+                Event(
+                    op_index=self.op_index,
+                    kind="-- RESUMES --",
+                    detail="the first worker was only slow, and now continues",
+                    outcome="",
+                )
+            )
 
         event = Event(op_index=self.op_index, kind=kind, detail=detail)
         self.events.append(event)

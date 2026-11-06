@@ -38,10 +38,18 @@ class AttemptFault:
     operation at that index never takes effect and the process dies. A value
     equal to the attempt's total operation count means the attempt finished its
     work but died before acknowledging, so the queue redelivers anyway.
+
+    `takeover_before_op` models the other half of at-least-once delivery: the
+    queue decides this worker is too slow, presumes it dead, and hands the same
+    work to a second worker. The second worker runs to completion before the
+    operation at that index takes effect, and then *this* worker carries on -
+    it was never dead, only slow. A crash-only fault model cannot express this,
+    and it is where fencing bugs live.
     """
 
     crash_before_op: int | None = None
     remote_timeouts: tuple[tuple[int, TimeoutKind], ...] = ()
+    takeover_before_op: int | None = None
 
     def timeout_for(self, remote_call_index: int) -> TimeoutKind | None:
         for index, kind in self.remote_timeouts:
@@ -64,6 +72,11 @@ class AttemptFault:
         }
         for index, kind in self.remote_timeouts:
             parts.append(f"remote call #{index}: {labels.get(kind, kind)}")
+        if self.takeover_before_op is not None:
+            parts.append(
+                f"another worker takes over and finishes before op "
+                f"#{self.takeover_before_op}"
+            )
         return "; ".join(parts)
 
 
