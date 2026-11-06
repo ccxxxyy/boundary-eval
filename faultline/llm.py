@@ -93,6 +93,29 @@ class CachedClient:
     def parse(self, model: str, body: dict[str, Any], cached_hit: bool) -> Completion:
         raise NotImplementedError
 
+    def is_fatal(self, status: int, text: str) -> bool:
+        """Should this error stop the run rather than be retried?
+
+        A 429 can mean two unrelated things: "too many requests this minute",
+        which clears on its own, and "this project is out of money or over its
+        cap", which never does. Retrying the second kind burns minutes per
+        call and reports a billing problem as a model failure.
+        """
+        if status != 429:
+            return False
+        lowered = text.lower()
+        return any(
+            phrase in lowered
+            for phrase in (
+                "spending cap",
+                "spend cap",
+                "credits are depleted",
+                "exceeded your current quota",
+                "billing details",
+                "monthly",
+            )
+        )
+
     # -- the loop --------------------------------------------------------
 
     def complete(
@@ -138,6 +161,8 @@ class CachedClient:
                 if response.status_code == 200:
                     return response.json()
                 detail = f"HTTP {response.status_code}: {response.text[:300]}"
+                if self.is_fatal(response.status_code, response.text):
+                    raise LLMError(detail)
                 if response.status_code in RETRYABLE_STATUS:
                     last = LLMError(detail)
                 else:

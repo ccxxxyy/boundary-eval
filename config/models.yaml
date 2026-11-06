@@ -15,9 +15,9 @@ dev:
       label: DeepSeek V4 Flash
       note: effectively free ($0.09/$0.18 per M) and far steadier than the :free tier
 
-# Google AI Studio. The free tier serves the current-generation Flash models;
-# the Pro models answer 429 without billing enabled, so they are not listed.
-# Reachable from networks where OpenRouter's frontier providers are not.
+# Google AI Studio, reachable from networks where OpenRouter's frontier
+# providers are not. The Flash models are served on the free tier; the Pro
+# models need billing enabled on the project.
 gemini:
   provider: gemini
   models:
@@ -27,6 +27,61 @@ gemini:
     - id: gemini-3-flash-preview
       label: Gemini 3 Flash
       reasoning_effort: high
+
+# The reporting run.
+gemini-frontier:
+  provider: gemini
+  defaults:
+    # These models reason at length and the thinking is charged against the
+    # same output allowance. At 28000 one of them spent the whole budget
+    # thinking and returned no module at all, which would have been recorded
+    # as a failure to write crash-safe code rather than as a truncated reply.
+    max_tokens: 60000
+  models:
+    - id: gemini-3.1-pro-preview
+      label: Gemini 3.1 Pro
+      reasoning_effort: high
+    - id: gemini-4-argon
+      label: Gemini 4 Argon
+      reasoning_effort: high
+    - id: gemini-3.5-flash
+      label: Gemini 3.5 Flash
+      reasoning_effort: high
+
+# Frontier models on their own endpoints, all OpenAI-compatible. Listed
+# separately because each needs its own key, and because any one of them may
+# be the only family reachable from a given network.
+deepseek:
+  provider: openai-compatible
+  base_url: https://api.deepseek.com/v1
+  env_var: DEEPSEEK_API_KEY
+  models:
+    - id: deepseek-reasoner
+      label: DeepSeek Reasoner
+
+qwen:
+  provider: openai-compatible
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  env_var: DASHSCOPE_API_KEY
+  models:
+    - id: qwen3-max
+      label: Qwen3 Max
+
+kimi:
+  provider: openai-compatible
+  base_url: https://api.moonshot.cn/v1
+  env_var: MOONSHOT_API_KEY
+  models:
+    - id: kimi-k2-thinking
+      label: Kimi K2 Thinking
+
+glm:
+  provider: openai-compatible
+  base_url: https://open.bigmodel.cn/api/paas/v4
+  env_var: ZHIPU_API_KEY
+  models:
+    - id: glm-5
+      label: GLM-5
 
 # Used when OpenRouter credits are available. Prices are USD per million
 # tokens at the time of writing, kept here so the README can state a spend.

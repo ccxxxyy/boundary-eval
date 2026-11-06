@@ -24,8 +24,21 @@ def book_seat(
 ```
 
 Put it in a single module. You may add helpers. You may import from the Python
-standard library. Do not import anything else, and do not try to read or write
-real files, sockets or clocks: `store`, `inventory` and `gateway` are the only
+standard library, and you may import the names used below:
+
+```python
+from faultline.api import (
+    ChargeDeclined,
+    DurableStore,
+    GatewayTimeout,
+    InventoryTimeout,
+    PaymentGateway,
+    SeatInventory,
+)
+```
+
+Do not import anything beyond those two, and do not try to read or write real
+files, sockets or clocks: `store`, `inventory` and `gateway` are the only
 outside world you have.
 
 ## The APIs you are given

@@ -32,6 +32,7 @@ import yaml
 
 from .gemini import GeminiClient
 from .llm import CachedClient, LLMError
+from .openai_compat import OpenAICompatibleClient
 from .loader import TaskBundle, discover_tasks, load_task
 from .openrouter import Completion, OpenRouterClient
 from .sandbox import grade_in_subprocess
@@ -70,6 +71,7 @@ class RoundRecord:
     public_clean: bool
     crash_safe: bool
     load_error: str | None = None
+    finish_reason: str = ""
 
 
 @dataclass
@@ -152,6 +154,26 @@ def extract_module(text: str, entrypoint: str) -> str | None:
     return best[1] if best else None
 
 
+def _priced(model: dict[str, Any], completion: Completion) -> float:
+    """Cost from the configured list price.
+
+    Some providers return a cost with the response and some do not, so a run
+    against those would otherwise report $0.0000 and the README could not
+    state what reproducing it costs. `price` is written as "in/out" in USD per
+    million tokens.
+    """
+    price = model.get("price")
+    if not price:
+        return 0.0
+    try:
+        prompt_rate, completion_rate = (float(part) for part in str(price).split("/"))
+    except ValueError:
+        return 0.0
+    return (
+        completion.prompt_tokens * prompt_rate + completion.completion_tokens * completion_rate
+    ) / 1e6
+
+
 def solution_path(task_id: str, model: str, seed: int, attempt: int) -> Path:
     safe_model = model.replace("/", "__").replace(":", "_")
     directory = RESULTS_DIR / "solutions" / task_id / safe_model
@@ -162,7 +184,26 @@ def solution_path(task_id: str, model: str, seed: int, attempt: int) -> Path:
 CLIENTS: dict[str, type[CachedClient]] = {
     "openrouter": OpenRouterClient,
     "gemini": GeminiClient,
+    "openai-compatible": OpenAICompatibleClient,
 }
+
+
+def build_client(group: Any, provider: str, offline: bool) -> CachedClient:
+    """Construct the client for a model set.
+
+    An OpenAI-compatible set also declares where to reach it and which
+    environment variable holds its key, so a new model family is a config
+    change rather than a new module.
+    """
+    if provider != "openai-compatible":
+        return CLIENTS[provider](offline=offline)
+    if not isinstance(group, dict) or not group.get("base_url"):
+        raise SystemExit("an openai-compatible model set must declare base_url")
+    return OpenAICompatibleClient(
+        offline=offline,
+        base_url=group["base_url"],
+        env_var=group.get("env_var"),
+    )
 
 
 def run_one(
@@ -211,13 +252,21 @@ def run_one(
 
         totals["prompt"] += completion.prompt_tokens
         totals["completion"] += completion.completion_tokens
-        totals["cost"] += completion.cost_usd
+        totals["cost"] += completion.cost_usd or _priced(model, completion)
         all_cached = all_cached and completion.cached
 
         code = extract_module(completion.text, getattr(task.module, "ENTRYPOINT", "handle"))
         if code is None:
+            truncated = completion.finish_reason.upper() in {"MAX_TOKENS", "LENGTH"}
+            detail = (
+                "ran out of output budget before writing the module "
+                f"({completion.completion_tokens} tokens, finish_reason="
+                f"{completion.finish_reason})"
+                if truncated
+                else "no python code block in the response"
+            )
             report = {
-                "load_error": "no python code block in the response",
+                "load_error": detail,
                 "crash_safe": False,
                 "public_scenarios_passed": 0,
                 "public_scenarios_total": public_total,
@@ -234,6 +283,7 @@ def run_one(
                     public_clean=False,
                     crash_safe=False,
                     load_error=report["load_error"],
+                    finish_reason=completion.finish_reason,
                 )
             )
             break
@@ -254,6 +304,7 @@ def run_one(
                 public_clean=public_ok,
                 crash_safe=bool(report.get("crash_safe")),
                 load_error=report.get("load_error"),
+                finish_reason=completion.finish_reason,
             )
         )
         if public_ok or attempt == repair_rounds:
@@ -373,12 +424,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=None, help="jsonl output path")
     args = parser.parse_args(argv)
 
-    defaults = config.get("defaults", {})
+    group_config = config[args.model_set]
+    defaults = {
+        **config.get("defaults", {}),
+        # A model set may need a different budget: reasoning models spend the
+        # output allowance on thinking, and a run that produced only thinking
+        # is a truncated answer, not a crash-safety failure.
+        **(group_config.get("defaults", {}) if isinstance(group_config, dict) else {}),
+    }
     seeds = args.seeds or defaults.get("seeds", [1])
     repair_rounds = (
         args.repair_rounds if args.repair_rounds is not None else defaults.get("repair_rounds", 2)
     )
-    group = config[args.model_set]
+    group = group_config
     entries = group["models"] if isinstance(group, dict) else group
     models = [{"id": m, "label": m} for m in args.model] if args.model else entries
     tasks = [load_task(t) for t in args.task] if args.task else discover_tasks()
@@ -386,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     provider = args.provider or (
         group.get("provider", "openrouter") if isinstance(group, dict) else "openrouter"
     )
-    client = CLIENTS[provider](offline=args.offline)
+    client = build_client(group, provider, args.offline)
     records: list[RunRecord] = []
 
     for task in tasks:

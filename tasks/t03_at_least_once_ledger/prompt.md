@@ -25,9 +25,14 @@ your storage is up to you, as long as `read_balance` can recover the balance in
 a process that has just started.
 
 Put both functions in a single module. You may add helpers. You may import
-from the Python standard library. Do not import anything else, and do not try
-to read or write real files, sockets or clocks: `store` is the only outside
-world you have.
+from the Python standard library, and you may import the names used below:
+
+```python
+from faultline.api import DurableStore, StoreValueTooLarge
+```
+
+Do not import anything beyond those two, and do not try to read or write real
+files, sockets or clocks: `store` is the only outside world you have.
 
 ## The API you are given
 

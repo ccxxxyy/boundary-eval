@@ -17,8 +17,14 @@ def mark_shipped(
 ```
 
 Put it in a single module. You may add helpers. You may import from the Python
-standard library. Do not import anything else, and do not try to read or write
-real files, sockets or clocks: `store` and `bus` are the only outside world you
+standard library, and you may import the names used below:
+
+```python
+from faultline.api import BrokerTimeout, DurableStore, EventBus
+```
+
+Do not import anything beyond those two, and do not try to read or write real
+files, sockets or clocks: `store` and `bus` are the only outside world you
 have.
 
 ## The APIs you are given
