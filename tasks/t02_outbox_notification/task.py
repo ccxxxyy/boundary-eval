@@ -1,4 +1,4 @@
-"""Task 2: the outbox problem, with no shortcut.
+﻿"""Task 2: the outbox problem, with no shortcut.
 
 Two systems have to agree and there is no transaction spanning them. The
 interesting part is that both directions are failures: publishing before the
@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from faultline.services import BusState, DurableStore, EventBus, StoreState
+from faultline.injector import TraceFacts
 from faultline.world import World
 
 TASK_ID = "t02_outbox_notification"
@@ -55,7 +56,7 @@ def invoke(world: World, solution: Any) -> Any:
     )
 
 
-def check(durable: Durable, returned: Any) -> list[str]:
+def check(durable: Durable, returned: Any, facts: TraceFacts) -> list[str]:
     violations: list[str] = []
 
     status = durable.store.data.get(STATUS_KEY)

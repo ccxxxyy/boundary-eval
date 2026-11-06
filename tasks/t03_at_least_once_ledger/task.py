@@ -1,4 +1,4 @@
-"""Task 3: at-least-once delivery with no multi-key transaction.
+﻿"""Task 3: at-least-once delivery with no multi-key transaction.
 
 This is the task with no shortcut. The deduplication marker and the balance it
 guards are two separate facts, the store has no multi-key transaction, and so
@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from faultline.services import DurableStore, StoreState
+from faultline.injector import TraceFacts
 from faultline.world import World
 
 TASK_ID = "t03_at_least_once_ledger"
@@ -62,7 +63,7 @@ def invoke(world: World, solution: Any) -> Any:
     return reader(store=store)
 
 
-def check(durable: Durable, returned: Any) -> list[str]:
+def check(durable: Durable, returned: Any, facts: TraceFacts) -> list[str]:
     if not isinstance(returned, int) or isinstance(returned, bool):
         return [f"read_balance() returned {returned!r}, expected an int"]
     if returned != EXPECTED_BALANCE:

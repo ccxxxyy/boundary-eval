@@ -1,7 +1,8 @@
-"""Exception types.
+﻿"""Exception types.
 
-`GatewayTimeout` is part of the contract shown to the solution author: it is a
-normal, expected condition that solution code must cope with.
+The `RemoteTimeout` family is part of the contract shown to the solution
+author: these are normal, expected conditions that solution code must cope
+with, and each task prompt says so.
 
 `SimulatedCrash` is *not* part of that contract. It models the process being
 killed, so solution code must never catch it. The injector treats a caught
@@ -19,9 +20,24 @@ class GatewayTimeout(RemoteTimeout):
     """The payment gateway did not answer. The charge may or may not exist."""
 
 
+class TransferTimeout(RemoteTimeout):
+    """The legacy transfer system did not answer. The money may or may not have
+    moved, and there is no way to find out."""
+
+
+class InventoryTimeout(RemoteTimeout):
+    """The inventory service did not answer. The hold or release may or may not
+    have taken effect."""
+
+
 class BrokerTimeout(RemoteTimeout):
     """The message broker did not answer. The message may or may not have been
     accepted for delivery."""
+
+
+class ChargeDeclined(Exception):
+    """The gateway refused the charge. Unlike a timeout this is a definite
+    answer: no money moved, and retrying the same charge will not help."""
 
 
 class SimulatedCrash(BaseException):

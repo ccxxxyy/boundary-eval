@@ -10,14 +10,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# What can happen to an individual `gateway.charge` call within one attempt.
-#   None      - the call succeeds normally
-#   "lost"    - times out and the request was NOT applied
-#   "applied" - times out but the request WAS applied (the ambiguous outcome)
+# What can happen to an individual remote call within one attempt.
+#   None       - the call succeeds normally
+#   "lost"     - times out and the request was NOT applied
+#   "applied"  - times out but the request WAS applied (the ambiguous outcome)
+#   "declined" - a definite business refusal; nothing was applied and
+#                retrying will not change the answer
 TimeoutKind = str
 
+# The default fault model: timeouts only. A task whose prompt lists other
+# outcomes declares its own `FAULT_VARIANTS`, so the faults a solution is
+# graded against are exactly the ones its prompt disclosed.
 TIMEOUT_VARIANTS: tuple[tuple[tuple[int, TimeoutKind], ...], ...] = (
-    (),                      # nothing times out
+    (),                      # nothing goes wrong
     ((0, "applied"),),       # first remote call: ambiguous timeout
     ((0, "lost"),),          # first remote call: clean timeout
     ((1, "applied"),),       # second remote call: ambiguous timeout
@@ -52,13 +57,13 @@ class AttemptFault:
             parts.append("dies after its last operation, before acknowledging")
         else:
             parts.append(f"crashes before op #{self.crash_before_op}")
+        labels = {
+            "applied": "timeout, but the request WAS applied",
+            "lost": "timeout, the request was not applied",
+            "declined": "declined",
+        }
         for index, kind in self.remote_timeouts:
-            label = (
-                "timeout, but the request WAS applied"
-                if kind == "applied"
-                else "timeout, the request was not applied"
-            )
-            parts.append(f"remote call #{index}: {label}")
+            parts.append(f"remote call #{index}: {labels.get(kind, kind)}")
         return "; ".join(parts)
 
 

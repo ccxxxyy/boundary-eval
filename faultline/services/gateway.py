@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..errors import GatewayTimeout
+from ..errors import ChargeDeclined, GatewayTimeout
 from ..world import World
 
 
@@ -23,6 +23,11 @@ class Charge:
 @dataclass
 class GatewayState:
     charges: dict[str, Charge] = field(default_factory=dict)  # by idempotency key
+    # Declines are remembered, because a decline is a definite answer: the same
+    # idempotency key presented again gets the same refusal. Without this a
+    # solution could "fix" a decline by retrying, which is not how a real
+    # gateway behaves and is not what the task prompts promise.
+    declined: set[str] = field(default_factory=set)
     issued: int = 0
 
     def charge_list(self) -> list[Charge]:
@@ -55,8 +60,17 @@ class PaymentGateway:
             event.outcome = "TIMEOUT (charge not created)"
             raise GatewayTimeout("no response from gateway")
 
+        # Idempotency outranks a new outcome. A key that already has a result
+        # gets that result back; a real gateway does not reconsider a charge it
+        # has already accepted just because the next request would have been
+        # refused.
         charge = self._state.charges.get(idempotency_key)
         if charge is None:
+            if timeout == "declined" or idempotency_key in self._state.declined:
+                self._state.declined.add(idempotency_key)
+                event.outcome = "DECLINED (no money moved)"
+                raise ChargeDeclined("insufficient funds")
+
             self._state.issued += 1
             charge = Charge(
                 charge_id=f"ch_{self._state.issued}",

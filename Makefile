@@ -1,6 +1,6 @@
 PY ?= python
 
-.PHONY: install validate-grader demo reproduce dev-run frontier-run models-check clean
+.PHONY: install validate-grader matrix demo reproduce dev-run frontier-run models-check clean
 
 install:
 	uv sync --extra dev || $(PY) -m pip install -e ".[dev]"
@@ -10,17 +10,25 @@ install:
 validate-grader:
 	$(PY) -m pytest -q
 
+# Every task, every reference and every known-broken solution, with the
+# public self-check and the fault injection side by side.
+matrix:
+	$(PY) -m faultline.matrix
+
 # The finding in one command: code that passes its own self-check and is still
 # not crash-safe, with the counterexample printed.
 demo:
-	$(PY) -m faultline.grade --task tasks/t01_idempotent_charge \
-		--solution tasks/t01_idempotent_charge/reference.py
+	$(PY) -m faultline.grade --task tasks/t03_at_least_once_ledger \
+		--solution tasks/t03_at_least_once_ledger/reference.py
 	@echo ""
-	$(PY) -m faultline.grade --task tasks/t01_idempotent_charge \
-		--solution tasks/t01_idempotent_charge/broken/b01_fresh_key_per_call.py || true
+	$(PY) -m faultline.grade --task tasks/t03_at_least_once_ledger \
+		--solution tasks/t03_at_least_once_ledger/broken/b01_mark_then_apply.py || true
+	@echo ""
+	$(PY) -m faultline.grade --task tasks/t03_at_least_once_ledger \
+		--solution tasks/t03_at_least_once_ledger/broken/b02_apply_then_mark.py || true
 
 # Everything a judge needs, from the shipped response cache. Offline and free.
-reproduce: validate-grader demo
+reproduce: validate-grader matrix demo
 	$(PY) -m faultline.run_eval --set frontier --offline
 
 models-check:

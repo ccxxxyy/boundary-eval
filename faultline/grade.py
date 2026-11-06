@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .faults import TIMEOUT_VARIANTS
 from .injector import EvalResult, explore
 from .loader import SolutionSource, TaskBundle, load_task
 from .selftest import format_report, run_public_scenarios
@@ -82,6 +83,9 @@ def grade(
     module = task.module
     max_crashes = max_crashes if max_crashes is not None else getattr(module, "MAX_CRASHES", 2)
     op_budget = getattr(module, "OP_BUDGET", 64)
+    # A task whose prompt lists outcomes beyond timeouts declares them here, so
+    # it is never graded against a fault it did not disclose.
+    variants = getattr(module, "FAULT_VARIANTS", TIMEOUT_VARIANTS)
 
     started = time.perf_counter()
     try:
@@ -101,9 +105,13 @@ def grade(
             load_error=f"{type(exc).__name__}: {exc}",
         )
 
-    public = run_public_scenarios(module, source.instantiate, op_budget)
+    public = run_public_scenarios(module, source.instantiate, op_budget, variants)
     result: EvalResult = explore(
-        module, source.instantiate, max_crashes=max_crashes, op_budget=op_budget
+        module,
+        source.instantiate,
+        max_crashes=max_crashes,
+        op_budget=op_budget,
+        variants=variants,
     )
 
     witness = result.minimal_counterexample()
@@ -139,7 +147,12 @@ def main(argv: list[str] | None = None) -> int:
     source = SolutionSource.from_path(args.solution)
 
     if args.public_only:
-        print(format_report(run_public_scenarios(task.module, source.instantiate)))
+        variants = getattr(task.module, "FAULT_VARIANTS", TIMEOUT_VARIANTS)
+        print(
+            format_report(
+                run_public_scenarios(task.module, source.instantiate, variants=variants)
+            )
+        )
         return 0
 
     report = grade(task, source, max_crashes=args.max_crashes)

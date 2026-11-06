@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from faultline.services import DurableStore, GatewayState, PaymentGateway, StoreState
+from faultline.injector import TraceFacts
 from faultline.world import World
 
 TASK_ID = "t01_idempotent_charge"
@@ -54,7 +55,7 @@ def invoke(world: World, solution: Any) -> Any:
     )
 
 
-def check(durable: Durable, returned: Any) -> list[str]:
+def check(durable: Durable, returned: Any, facts: TraceFacts) -> list[str]:
     violations: list[str] = []
     charges = durable.gateway.charge_list()
 

@@ -1,4 +1,4 @@
-"""Run the eval: ask models to solve the tasks, then grade what they write.
+﻿"""Run the eval: ask models to solve the tasks, then grade what they write.
 
     # build and debug cheaply
     python -m faultline.run_eval --set dev --seeds 1
@@ -33,7 +33,8 @@ import yaml
 from .loader import TaskBundle, discover_tasks, load_task
 from .openrouter import Completion, OpenRouterClient, OpenRouterError
 from .sandbox import grade_in_subprocess
-from .selftest import PUBLIC_SCENARIOS
+from .faults import TIMEOUT_VARIANTS
+from .selftest import public_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config" / "models.yaml"
@@ -73,8 +74,12 @@ def load_config() -> dict[str, Any]:
     return yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
 
 
-def public_scenario_list() -> str:
-    return "\n".join(f"- {name}" for name, _ in PUBLIC_SCENARIOS)
+def task_scenarios(task: TaskBundle) -> list[tuple[str, Any]]:
+    return public_scenarios(getattr(task.module, "FAULT_VARIANTS", TIMEOUT_VARIANTS))
+
+
+def public_scenario_list(task: TaskBundle) -> str:
+    return "\n".join(f"- {name}" for name, _ in task_scenarios(task))
 
 
 def build_user_prompt(task: TaskBundle) -> str:
@@ -83,7 +88,7 @@ def build_user_prompt(task: TaskBundle) -> str:
         "## How your module will be checked\n\n"
         "A self-check will run your module against these scenarios and report "
         "any failures back to you so you can revise:\n\n"
-        f"{public_scenario_list()}\n\n"
+        f"{public_scenario_list(task)}\n\n"
         "Your module will then be graded against every combination of the "
         "failures listed above, including process crashes at every point where "
         "one is possible. Write for that, not for the self-check.\n"
@@ -114,6 +119,7 @@ def run_one(
     repair_rounds: int,
     defaults: dict[str, Any],
 ) -> RunRecord:
+    public_total = len(task_scenarios(task))
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": build_user_prompt(task)},
@@ -142,7 +148,7 @@ def run_one(
                 repair_rounds_used=attempt,
                 crash_safe=False,
                 public_passed=0,
-                public_total=len(PUBLIC_SCENARIOS),
+                public_total=public_total,
                 traces_run=0,
                 load_error=f"api error: {exc}",
             )
@@ -158,7 +164,7 @@ def run_one(
                 "load_error": "no python code block in the response",
                 "crash_safe": False,
                 "public_scenarios_passed": 0,
-                "public_scenarios_total": len(PUBLIC_SCENARIOS),
+                "public_scenarios_total": public_total,
                 "traces_run": 0,
                 "violations": [],
                 "counterexample": None,
@@ -188,7 +194,7 @@ def run_one(
         repair_rounds_used=attempt,
         crash_safe=bool(report.get("crash_safe")),
         public_passed=int(report.get("public_scenarios_passed", 0)),
-        public_total=int(report.get("public_scenarios_total", len(PUBLIC_SCENARIOS))),
+        public_total=int(report.get("public_scenarios_total", public_total)),
         traces_run=int(report.get("traces_run", 0)),
         violations=list(report.get("violations") or []),
         counterexample=report.get("counterexample"),

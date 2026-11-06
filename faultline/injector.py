@@ -42,7 +42,7 @@ class Task(Protocol):
     def invoke(self, world: World, solution: Any) -> Any:
         """Build the service facades and call the solution's entrypoint."""
 
-    def check(self, durable: Any, returned: Any) -> list[str]:
+    def check(self, durable: Any, returned: Any, facts: "TraceFacts") -> list[str]:
         """Return a human-readable violation for each invariant that broke."""
 
     def describe_state(self, durable: Any) -> list[str]:
@@ -74,6 +74,43 @@ class AttemptResult:
         else:
             lines.append(f"    -- handler returned {self.returned!r}")
         return "\n".join(lines)
+
+
+@dataclass
+class TraceFacts:
+    """What actually went wrong during a trace.
+
+    Some invariants are conditional on this. A task where the safe answer is
+    "stop and escalate to a human" needs to forbid escalating when nothing went
+    wrong, or a solution that escalates unconditionally would pass while doing
+    no work at all.
+    """
+
+    attempts: int
+    crashes: int
+    timeouts: int
+    declines: int
+
+    @property
+    def fault_free(self) -> bool:
+        """Nothing went wrong at all: the handler had a clean run."""
+        return self.crashes == 0 and self.timeouts == 0 and self.declines == 0
+
+    @property
+    def declined_cleanly(self) -> bool:
+        """A definite business refusal and nothing else. The handler had a
+        clear answer to act on, so it has no excuse for an ambiguous result."""
+        return self.declines > 0 and self.crashes == 0 and self.timeouts == 0
+
+    @classmethod
+    def of(cls, attempts: tuple["AttemptResult", ...]) -> "TraceFacts":
+        events = [e for a in attempts for e in a.events]
+        return cls(
+            attempts=len(attempts),
+            crashes=sum(1 for a in attempts if a.crashed),
+            timeouts=sum(1 for e in events if e.outcome.startswith("TIMEOUT")),
+            declines=sum(1 for e in events if e.outcome.startswith("DECLINED")),
+        )
 
 
 @dataclass
@@ -181,7 +218,10 @@ def _run_attempt(
     )
 
 
-def _violations(task: Task, durable: Any, final: AttemptResult) -> list[str]:
+def _violations(
+    task: Task, durable: Any, attempts: tuple[AttemptResult, ...]
+) -> list[str]:
+    final = attempts[-1]
     if isinstance(final.error, OpBudgetExceeded):
         return [f"the handler never finished: {final.error}"]
     if final.swallowed_crash:
@@ -191,7 +231,7 @@ def _violations(task: Task, durable: Any, final: AttemptResult) -> list[str]:
             f"the handler raised {type(final.error).__name__} on an attempt that was "
             f"allowed to complete: {final.error}"
         ]
-    return task.check(durable, final.returned)
+    return task.check(durable, final.returned, TraceFacts.of(attempts))
 
 
 def _trace(task: Task, attempts: tuple[AttemptResult, ...], durable: Any) -> TraceResult:
@@ -199,7 +239,7 @@ def _trace(task: Task, attempts: tuple[AttemptResult, ...], durable: Any) -> Tra
         attempts=attempts,
         durable=durable,
         state_lines=task.describe_state(durable),
-        violations=_violations(task, durable, attempts[-1]),
+        violations=_violations(task, durable, attempts),
     )
 
 
@@ -238,6 +278,7 @@ def explore(
     max_crashes: int = 2,
     op_budget: int = 64,
     trace_budget: int = 20000,
+    variants: tuple[tuple[tuple[int, str], ...], ...] = TIMEOUT_VARIANTS,
 ) -> EvalResult:
     """Run the solution through every fault schedule up to `max_crashes` crashes."""
     failures: list[TraceResult] = []
@@ -263,7 +304,7 @@ def explore(
         if counters["exhausted"]:
             return
 
-        for timeouts in TIMEOUT_VARIANTS:
+        for timeouts in variants:
             durable = copy.deepcopy(durable_state)
             fault = AttemptFault(crash_before_op=None, remote_timeouts=timeouts)
             result = _run_attempt(
@@ -277,7 +318,7 @@ def explore(
         if crashes_left == 0:
             return
 
-        for timeouts in TIMEOUT_VARIANTS:
+        for timeouts in variants:
             probe = _run_attempt(
                 task,
                 make_solution,
