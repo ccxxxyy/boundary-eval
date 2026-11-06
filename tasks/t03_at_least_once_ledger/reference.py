@@ -1,42 +1,64 @@
-"""Reference solution.
+"""Reference solution: fold the amount in and name the message in one write.
 
-The balance and the set of messages already folded into it live in one key, so
-one `compare_and_set` makes both facts durable together. Either the message is
-applied and recorded, or neither happened and the redelivery will apply it.
-There is no window in between because there is only one write.
+The balance key holds either `"<balance>"` or `"<balance>|<message_id>"`. The
+second form means: the balance already includes that message, but the
+per-message marker has not been written yet. Because the amount and the name
+of the message it came from become durable in the *same* compare-and-set,
+there is no state in which the balance moved and nothing records why.
+
+Recovery is the interesting half. A handler that finds a name parked in the
+balance key finishes that message off - writes its marker and clears the name -
+before doing its own work. It does not need to know that message's amount,
+only that the balance already includes it. So a crash anywhere in the
+three-write sequence is repaired by whichever delivery arrives next, including
+a redelivery of the very message that was interrupted.
+
+Durable state stays bounded: one balance, one in-flight name, and one small
+marker per distinct message.
 """
 
 from __future__ import annotations
 
-import json
-
 from faultline.api import DurableStore
 
-STATE_KEY = "ledger:state"
+BALANCE_KEY = "bal"
 
 
-def _decode(raw: str | None) -> tuple[int, list[str]]:
+def _marker(message_id: str) -> str:
+    return f"m:{message_id}"
+
+
+def _parse(raw: str | None) -> tuple[int, str | None]:
     if raw is None:
-        return 0, []
-    state = json.loads(raw)
-    return int(state["balance"]), list(state["applied"])
-
-
-def _encode(balance: int, applied: list[str]) -> str:
-    return json.dumps({"balance": balance, "applied": applied}, sort_keys=True)
+        return 0, None
+    balance, sep, in_flight = raw.partition("|")
+    return int(balance), (in_flight if sep else None)
 
 
 def handle_message(message_id: str, amount_cents: int, store: DurableStore) -> None:
     while True:
-        raw = store.get(STATE_KEY)
-        balance, applied = _decode(raw)
-        if message_id in applied:
+        raw = store.get(BALANCE_KEY)
+        balance, in_flight = _parse(raw)
+
+        if in_flight is not None:
+            # The balance already includes `in_flight`. Finish recording it,
+            # then drop the name so the key is free for the next message.
+            store.put(_marker(in_flight), "done")
+            store.compare_and_set(BALANCE_KEY, raw, str(balance))
+            continue
+
+        if store.get(_marker(message_id)) == "done":
             return
-        candidate = _encode(balance + amount_cents, sorted([*applied, message_id]))
-        if store.compare_and_set(STATE_KEY, raw, candidate):
-            return
+
+        claimed = f"{balance + amount_cents}|{message_id}"
+        if not store.compare_and_set(BALANCE_KEY, raw, claimed):
+            continue
+
+        store.put(_marker(message_id), "done")
+        store.compare_and_set(BALANCE_KEY, claimed, str(balance + amount_cents))
+        return
 
 
 def read_balance(store: DurableStore) -> int:
-    balance, _ = _decode(store.get(STATE_KEY))
+    balance, _ = _parse(store.get(BALANCE_KEY))
     return balance

@@ -51,6 +51,17 @@ class DurableStore:
     def delete(self, key: str) -> None: ...
 ```
 
+### One value is limited to 32 bytes
+
+`put` and `compare_and_set` raise `StoreValueTooLarge` if the value is longer
+than 32 bytes when encoded as UTF-8. Keys are not limited, and there is no
+limit on how many keys you use.
+
+This is a real constraint, not a formality: it means your durable state cannot
+grow with the number of messages you have processed. A value has room for a
+balance and one message id, and not for a balance and every message id you
+have ever seen.
+
 ## How messages are delivered
 
 The consumer is handed a batch of deliveries and calls `handle_message` once
@@ -62,11 +73,17 @@ m_payroll  +250000
 m_rent      -90000
 m_payroll  +250000      <- the same message again
 m_refund    +12500
+m_bonus     +40000
 m_rent      -90000      <- and again
+m_fees       -1500
+m_tax       -33000
+m_bonus     +40000      <- and again
+m_tax       -33000      <- and again
 ```
 
-The same `message_id` always carries the same `amount_cents`. Three distinct
-messages appear here, so the balance must end at `250000 - 90000 + 12500`.
+The same `message_id` always carries the same `amount_cents`. Six distinct
+messages appear here, so the balance must end at
+`250000 - 90000 + 12500 + 40000 - 1500 - 33000`.
 
 ## What can go wrong
 
@@ -94,7 +111,8 @@ After the final, acknowledged run of the batch:
 
 - `read_balance(store)` returns exactly the sum of the **distinct** messages'
   amounts.
-- Neither function raises.
+- Neither function raises, including never raising `StoreValueTooLarge`.
+- No key in the store holds a value longer than 32 bytes.
 
 These must hold for *every* point at which the process could have died, not
 just the common case.

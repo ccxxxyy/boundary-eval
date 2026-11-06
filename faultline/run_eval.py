@@ -30,8 +30,10 @@ from typing import Any
 
 import yaml
 
+from .gemini import GeminiClient
+from .llm import CachedClient, LLMError
 from .loader import TaskBundle, discover_tasks, load_task
-from .openrouter import Completion, OpenRouterClient, OpenRouterError
+from .openrouter import Completion, OpenRouterClient
 from .sandbox import grade_in_subprocess
 from .faults import TIMEOUT_VARIANTS
 from .selftest import public_scenarios
@@ -157,8 +159,14 @@ def solution_path(task_id: str, model: str, seed: int, attempt: int) -> Path:
     return directory / f"seed{seed}_r{attempt}.py"
 
 
+CLIENTS: dict[str, type[CachedClient]] = {
+    "openrouter": OpenRouterClient,
+    "gemini": GeminiClient,
+}
+
+
 def run_one(
-    client: OpenRouterClient,
+    client: CachedClient,
     task: TaskBundle,
     model: dict[str, Any],
     seed: int,
@@ -186,7 +194,7 @@ def run_one(
                 seed=seed,
                 reasoning_effort=model.get("reasoning_effort"),
             )
-        except OpenRouterError as exc:
+        except LLMError as exc:
             return RunRecord(
                 task_id=task.task_id,
                 model=model["id"],
@@ -349,8 +357,15 @@ def summarise(records: list[RunRecord]) -> str:
 def main(argv: list[str] | None = None) -> int:
     config = load_config()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--set", dest="model_set", default="dev", choices=["dev", "frontier"])
+    model_sets = [k for k in config if k != "defaults"]
+    parser.add_argument("--set", dest="model_set", default="dev", choices=model_sets)
     parser.add_argument("--model", action="append", help="override: an explicit model slug")
+    parser.add_argument(
+        "--provider",
+        default=None,
+        choices=sorted(CLIENTS),
+        help="which API to call; defaults to the model set's own provider",
+    )
     parser.add_argument("--task", action="append", help="task directory; repeatable")
     parser.add_argument("--seeds", type=int, nargs="+", default=None)
     parser.add_argument("--repair-rounds", type=int, default=None)
@@ -363,14 +378,15 @@ def main(argv: list[str] | None = None) -> int:
     repair_rounds = (
         args.repair_rounds if args.repair_rounds is not None else defaults.get("repair_rounds", 2)
     )
-    models = (
-        [{"id": m, "label": m} for m in args.model]
-        if args.model
-        else config[args.model_set]
-    )
+    group = config[args.model_set]
+    entries = group["models"] if isinstance(group, dict) else group
+    models = [{"id": m, "label": m} for m in args.model] if args.model else entries
     tasks = [load_task(t) for t in args.task] if args.task else discover_tasks()
 
-    client = OpenRouterClient(offline=args.offline)
+    provider = args.provider or (
+        group.get("provider", "openrouter") if isinstance(group, dict) else "openrouter"
+    )
+    client = CLIENTS[provider](offline=args.offline)
     records: list[RunRecord] = []
 
     for task in tasks:
@@ -391,7 +407,12 @@ def main(argv: list[str] | None = None) -> int:
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = Path(args.out) if args.out else RESULTS_DIR / f"runs_{args.model_set}_{stamp}.jsonl"
+    out = (
+        (REPO_ROOT / args.out).resolve()
+        if args.out
+        else RESULTS_DIR / f"runs_{args.model_set}_{stamp}.jsonl"
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(asdict(record), ensure_ascii=False) + "\n")

@@ -91,6 +91,61 @@ What this does and does not show:
   *frontier* model hands over code that is green on its own tests and
   still loses or doubles money. That run is what the credits are for.
 
+## Gemini free tier (Gemini 3.5 Flash and Gemini 3 Flash, 1 seed)
+
+Run through Google AI Studio, which is reachable from networks where
+OpenRouter's frontier providers are not. 7 of 10 runs completed before
+the key's credits were exhausted; the other 3 failed with HTTP 402 and
+503 and are recorded as unusable, not as model failures.
+
+| | completed | crash-safe | passed own tests but unsafe |
+|---|---|---|---|
+| Gemini 3.5 Flash | 3 | 3 | 0 |
+| Gemini 3 Flash | 4 | 4 | 0 |
+
+**This is a negative result for the eval, and it is the important one.**
+Both models were crash-safe on every task they finished, mostly on the
+first attempt. Inspecting what they wrote confirms the passes are real,
+not a grader leak: on task 3 the model wrote the composite single-key
+compare-and-set with a retry loop, and on task 2 it persisted the
+`event_id` through compare-and-set before publishing and marked the
+publish durable afterwards.
+
+### Why the tasks turned out to be too easy
+
+Under crash-only, single-threaded fault injection, *any* task whose
+entire state fits in one key has a universal solution: read the key,
+compute, write the key back in one atomic put. The composite blob is
+textbook, and current models reproduce it on demand.
+
+The tasks that are not reducible to one blob are the ones with an
+external effect that cannot live inside it: the charge in task 1, the
+transfer in task 4, the seat hold in task 5. Those are the right shape,
+but the guarding pattern ("write the idempotency key durably before
+spending it") is equally well memorized.
+
+So the eval as it stands measures recall of three known patterns. That
+is not a frontier limitation. Two changes follow from this, and both
+are testable without spending anything, because the reference and
+known-broken solutions are in the repository:
+
+1. **Bound the size of a stored value.** A store that refuses values
+   over a few hundred bytes is realistic - no production system keeps
+   every processed message id in one row forever - and it removes the
+   universal blob solution, forcing the dedup marker and the data it
+   guards to be reconciled some other way.
+2. **Add takeover, not just crashes.** At-least-once queues redeliver
+   to a *second* worker while the first is merely stalled, not dead.
+   Exactly-once then needs a fencing token that gates every durable
+   write and every external effect. A crash-only harness cannot see
+   this class of bug at all, and it is where production incidents
+   actually come from.
+
+Task 5 (saga compensation) is the one task no model has yet completed
+cleanly: DeepSeek produced a syntax error after repair and both Gemini
+models hit 402 before finishing. It has 11 public scenarios and about
+1200 schedules. It may already carry signal that has not been measured.
+
 ## Failure-mode taxonomy (from known-broken solutions, not from models)
 
 These are the ways production code actually goes wrong. Each has a

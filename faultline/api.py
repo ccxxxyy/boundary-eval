@@ -10,6 +10,7 @@ from .errors import (
     GatewayTimeout,
     InventoryTimeout,
     RemoteTimeout,
+    StoreValueTooLarge,
     TransferTimeout,
 )
 from .services import (
@@ -31,5 +32,6 @@ __all__ = [
     "PaymentGateway",
     "RemoteTimeout",
     "SeatInventory",
+    "StoreValueTooLarge",
     "TransferTimeout",
 ]

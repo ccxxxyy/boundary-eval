@@ -35,6 +35,17 @@ class BrokerTimeout(RemoteTimeout):
     accepted for delivery."""
 
 
+class StoreValueTooLarge(Exception):
+    """A value exceeded the store's per-value size limit.
+
+    Part of the contract, and declared in the prompt of any task that sets a
+    limit. It exists to rule out the degenerate design where every fact a
+    handler has ever learned is serialised into one key: that makes any
+    single-key store trivially transactional, and it is a real bug, because
+    the row grows without bound as traffic arrives.
+    """
+
+
 class ChargeDeclined(Exception):
     """The gateway refused the charge. Unlike a timeout this is a definite
     answer: no money moved, and retrying the same charge will not help."""

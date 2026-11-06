@@ -1,4 +1,4 @@
-"""BROKEN. Expected violation: "expected 172500".
+"""BROKEN. Expected violation: "expected 178000".
 
 No deduplication whatsoever. Included as the floor of the task: it is caught by
 the very first self-check scenario, so it measures nothing on its own, but its
