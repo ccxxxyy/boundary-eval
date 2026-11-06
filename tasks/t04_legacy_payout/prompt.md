@@ -1,4 +1,4 @@
-# Task: pay out through a legacy system, at most once
+﻿# Task: pay out through a legacy system, at most once
 
 You are writing the payout step of a settlements pipeline. The transfer goes
 through an old partner API that has no idempotency key and no way to look up
@@ -33,7 +33,7 @@ class DurableStore:
     """A durable key-value store.
 
     Each operation is atomic, and once it returns, its effect is durable: it
-    survives a process crash. There are no multi-key transactions.
+    survives a process crash. The four methods below are the whole API.
     """
 
     def get(self, key: str) -> str | None: ...
@@ -71,8 +71,8 @@ def new_id() -> str:
     """
 ```
 
-That is the whole of `LegacyTransferAPI`. There is no `lookup`, no
-`list_transfers`, and no idempotency parameter.
+The listing above is the complete `LegacyTransferAPI`. Do not call methods on
+it that are not shown.
 
 ## The contract with the rest of the system
 

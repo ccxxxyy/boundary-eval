@@ -1,4 +1,4 @@
-# Task: book a seat, or give it back
+﻿# Task: book a seat, or give it back
 
 You are writing the booking step of a ticketing pipeline. It touches two
 systems: a seat inventory and a payment gateway. Both have to end up agreeing,
@@ -35,7 +35,7 @@ class DurableStore:
     """A durable key-value store.
 
     Each operation is atomic, and once it returns, its effect is durable: it
-    survives a process crash. There are no multi-key transactions.
+    survives a process crash. The four methods below are the whole API.
     """
 
     def get(self, key: str) -> str | None: ...

@@ -1,6 +1,6 @@
 PY ?= python
 
-.PHONY: install validate-grader matrix demo reproduce dev-run frontier-run models-check clean
+.PHONY: install validate-grader matrix demo reproduce dev-run frontier-run models-check secret-scan package clean
 
 install:
 	uv sync --extra dev || $(PY) -m pip install -e ".[dev]"
@@ -39,6 +39,12 @@ dev-run:
 
 frontier-run:
 	$(PY) -m faultline.run_eval --set frontier
+
+secret-scan:
+	$(PY) scripts/secret_scan.py
+
+package: secret-scan
+	$(PY) scripts/package.py
 
 clean:
 	rm -rf .pytest_cache results/solutions

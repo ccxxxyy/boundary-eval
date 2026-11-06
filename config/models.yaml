@@ -1,4 +1,4 @@
-# Model sets. Build and debug against `dev`, report against `frontier`.
+﻿# Model sets. Build and debug against `dev`, report against `frontier`.
 #
 # Ids are OpenRouter model slugs. The live catalogue moves, so verify before a
 # reporting run:
@@ -34,6 +34,6 @@ frontier:
 
 defaults:
   temperature: 0.0
-  max_tokens: 16000
+  max_tokens: 28000
   seeds: [1, 2, 3]
   repair_rounds: 2

@@ -15,7 +15,7 @@ import pytest
 
 from faultline.loader import load_task
 from faultline.openrouter import Completion
-from faultline.run_eval import run_one
+from faultline.run_eval import extract_module, run_one
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TASK_DIR = REPO_ROOT / "tasks" / "t01_idempotent_charge"
@@ -92,6 +92,33 @@ def test_unusable_answers_are_recorded_not_raised(answer: str) -> None:
 
     assert not record.crash_safe
     assert record.load_error is not None
+
+
+def test_extraction_prefers_the_block_that_compiles_and_defines_the_entrypoint() -> None:
+    """Models explain themselves with fragments. Grading a fragment would
+    report a syntax error as a crash-safety failure."""
+    response = (
+        "The problem is here:\n\n"
+        "```python\n    except GatewayTimeout:\n        retry()\n```\n\n"
+        "Here is the full module:\n\n"
+        "```python\ndef handle_order(**kwargs):\n    return 'ch_1'\n```\n"
+    )
+    code = extract_module(response, "handle_order")
+    assert code is not None
+    assert "def handle_order" in code
+    compile(code, "<extracted>", "exec")
+
+
+def test_extraction_recovers_a_truncated_block() -> None:
+    """Output cut off by the token limit has no closing fence."""
+    response = "```python\ndef handle_order(**kwargs):\n    return 'ch_1'\n"
+    code = extract_module(response, "handle_order")
+    assert code is not None
+    assert "def handle_order" in code
+
+
+def test_extraction_ignores_non_python_blocks() -> None:
+    assert extract_module('```json\n{"a": 1}\n```', "handle_order") is None
 
 
 def test_recorded_solution_is_written_to_disk() -> None:

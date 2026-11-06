@@ -28,8 +28,7 @@ class DurableStore:
     """A durable key-value store.
 
     Each operation is atomic, and once it returns, its effect is durable: it
-    survives a process crash. There are no multi-key transactions - you cannot
-    write two keys in one atomic step.
+    survives a process crash. The four methods below are the whole API.
     """
 
     def get(self, key: str) -> str | None: ...

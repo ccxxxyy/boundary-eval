@@ -17,7 +17,7 @@ and when it finds a violation it prints the exact execution that caused it.
 Task 3 is a ledger consumer behind an at-least-once queue. The store has no
 multi-key transaction, so the deduplication marker and the balance it guards
 have to become durable separately. There are two obvious orderings, and both
-are wrong 鈥?in opposite directions:
+are wrong -- in opposite directions:
 
 | | public self-check | exhaustive fault injection |
 |---|---|---|
@@ -29,8 +29,8 @@ every test a careful developer would write. The way through is to stop treating
 them as two facts and put the dedup state and the data it guards in a single
 atomic write.
 
-`make demo` runs all three 鈥?the reference and both broken orderings 鈥?and
-prints the counterexample trace for each:
+`make demo` runs the reference and both broken orderings, and prints the
+counterexample trace for each:
 
 ```
   attempt 1 (crashes before op #3):
@@ -51,7 +51,7 @@ prints the counterexample trace for each:
 | 1 | Charge a customer exactly once | Fixing the idempotency key durably *before* spending it. A key held in memory is regenerated after a crash and buys a second charge. |
 | 2 | Ship an order and notify downstream | "Already shipped" is not "already notified". The textbook idempotency guard returns early and loses the event forever. |
 | 3 | Apply each ledger message exactly once | With no multi-key transaction, neither ordering of "mark" and "apply" is safe. The dedup state has to live with the data. |
-| 4 | Pay out through a legacy system | Against a system with no idempotency key and no way to query it, exactly-once is unreachable. The answer is at-most-once plus an honest escalation 鈥?not a retry loop. |
+| 4 | Pay out through a legacy system | Against a system with no idempotency key and no way to query it, exactly-once is unreachable. The answer is at-most-once plus an honest escalation, not a retry loop. |
 | 5 | Book a seat, or give it back | A decline is final; a timeout is not. Compensating on both releases a seat the customer already paid for. Recording the outcome before the compensation leaks the seat forever. |
 
 Task 1 is deliberately the calibration task: deriving the key from the order id
@@ -76,7 +76,7 @@ in production it is where the expensive incidents come from.
   task that introduces a new failure mode declares it, and both the public
   self-check and the fault injection are derived from that same declaration.
 - **Solutions get what a developer gets.** Before grading, each candidate runs
-  against the public scenarios 鈥?normal delivery, redelivery, and each
+  against the public scenarios: normal delivery, redelivery, and each
   remote-call outcome the prompt lists. Failures are reported back and the model
   may revise. Fault-injection output is never fed back, so no model can grind
   against the grader.
@@ -126,7 +126,7 @@ Two details keep it both sound and fast:
 
 - **Crash points sit before mutating operations only.** Crashing before a read
   is indistinguishable from crashing before the following write, because a read
-  leaves no durable trace 鈥?so skipping those points loses no coverage.
+  leaves no durable trace, so skipping those points loses no coverage.
 - **Solution code is re-instantiated for every attempt.** The process is
   supposed to have died, so anything stashed in a module-level variable must be
   gone. Importing once and reusing the module would let in-memory bookkeeping
@@ -174,7 +174,8 @@ numbers. Models are configured in `config/models.yaml`.
 | `make validate-grader` | ~20 s, free |
 | `make matrix` | ~15 s, free |
 | `make reproduce` | under a minute, free (replays the cache) |
-| Full frontier run | see `results/` for the recorded spend |
+| Cheap-model smoke test | ~$0.04, DeepSeek V4 Flash, 1 seed (see `docs/findings.md`) |
+| Full frontier run | pending OpenRouter credits; see `results/` for the recorded spend |
 
 ## Layout
 
@@ -208,3 +209,6 @@ validation/       the grader's own test suite, plus adversarial inputs
 
 Built from scratch for the micro1 Eval Hackathon. No code in this repository
 predates the event; the repository's first commit is part of the submission.
+See `docs/prior-work.md` for the comparison with SWE-bench, Jepsen and
+idempotency tutorials, `docs/findings.md` for results, and `docs/video.md`
+for the walkthrough script.

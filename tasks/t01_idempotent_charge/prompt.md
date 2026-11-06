@@ -1,4 +1,4 @@
-# Task: charge a customer exactly once
+﻿# Task: charge a customer exactly once
 
 You are writing the payment step of an order pipeline. Your function is invoked
 by a queue worker. Implement it so that the customer is charged **exactly
@@ -29,7 +29,7 @@ class DurableStore:
     """A durable key-value store.
 
     Each operation is atomic, and once it returns, its effect is durable: it
-    survives a process crash. There are no multi-key transactions.
+    survives a process crash. The four methods below are the whole API.
     """
 
     def get(self, key: str) -> str | None: ...
