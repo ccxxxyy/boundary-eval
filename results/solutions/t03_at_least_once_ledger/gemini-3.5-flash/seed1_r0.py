@@ -1,59 +1,56 @@
 import hashlib
+from faultline.api import DurableStore, StoreValueTooLarge
 
 
-def _token(message_id: str) -> str:
-    return hashlib.sha256(message_id.encode("utf-8")).hexdigest()[:10]
+def _get_token(message_id: str) -> str:
+    """Generate a deterministic 10-hex-character token for a message_id."""
+    return hashlib.md5(message_id.encode("utf-8")).hexdigest()[:10]
 
 
 def handle_message(message_id: str, amount_cents: int, store: DurableStore) -> None:
     """Apply this message's `amount_cents` to the balance, exactly once."""
-    if store.get(f"applied:{message_id}") is not None:
-        return
+    msg_key = f"msg:{message_id}"
+    token = _get_token(message_id)
 
-    m_token = _token(message_id)
-
-    if store.get(f"win_msg:{m_token}") is not None:
-        store.put(f"applied:{message_id}", "1")
-        return
-
+    # Step 1: Ensure message state is marked PENDING (or return if already DONE)
     while True:
-        if store.get(f"applied:{message_id}") is not None:
+        status = store.get(msg_key)
+        if status == "DONE":
             return
-        if store.get(f"win_msg:{m_token}") is not None:
-            store.put(f"applied:{message_id}", "1")
-            return
+        if status == "PENDING":
+            break
+        if store.compare_and_set(msg_key, None, "PENDING"):
+            break
 
-        head_str = store.get("head")
-        if head_str is None:
-            curr_bal = 0
-            curr_token = ""
+    # Step 2: Apply balance update atomically
+    while True:
+        bal_val = store.get("balance")
+        if bal_val is None:
+            current_cents = 0
+            current_token = ""
         else:
-            parts = head_str.split(":")
-            curr_bal = int(parts[0])
-            curr_token = parts[1]
+            cents_str, current_token = bal_val.split(":", 1)
+            current_cents = int(cents_str)
 
-        if curr_token == m_token:
-            store.put(f"win_msg:{m_token}", "1")
-            store.put(f"applied:{message_id}", "1")
-            return
+        if current_token == token:
+            break
 
-        if curr_token:
-            store.put(f"win_msg:{curr_token}", "1")
+        new_cents = current_cents + amount_cents
+        new_bal_val = f"{new_cents}:{token}"
 
-        new_bal = curr_bal + amount_cents
-        new_head_str = f"{new_bal}:{m_token}"
+        if store.compare_and_set("balance", bal_val, new_bal_val):
+            break
 
-        if store.compare_and_set("head", head_str, new_head_str):
-            store.put(f"win_msg:{m_token}", "1")
-            store.put(f"applied:{message_id}", "1")
-            return
+    # Step 3: Mark message as DONE
+    store.put(msg_key, "DONE")
 
 
 def read_balance(store: DurableStore) -> int:
     """Return the current balance, in cents, from whatever `handle_message`
     has written. Called in a fresh process, so it must work from durable state
     alone."""
-    head_str = store.get("head")
-    if head_str is None:
+    bal_val = store.get("balance")
+    if bal_val is None:
         return 0
-    return int(head_str.split(":")[0])
+    cents_str, _ = bal_val.split(":", 1)
+    return int(cents_str)

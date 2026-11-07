@@ -1,0 +1,179 @@
+{
+ "instance": {
+  "seed": 1,
+  "cash": 179812.76,
+  "stocks": [
+   {
+    "code": "600022",
+    "sector": "银行",
+    "price": 29.87,
+    "target_weight": 0.042,
+    "holding": 20900,
+    "locked": 0,
+    "status": "正常"
+   },
+   {
+    "code": "601992",
+    "sector": "医药",
+    "price": 50.19,
+    "target_weight": 0.0893,
+    "holding": 30700,
+    "locked": 9200,
+    "status": "正常"
+   },
+   {
+    "code": "002566",
+    "sector": "电子",
+    "price": 16.89,
+    "target_weight": 0.0837,
+    "holding": 59300,
+    "locked": 0,
+    "status": "停牌"
+   },
+   {
+    "code": "000948",
+    "sector": "消费",
+    "price": 30.01,
+    "target_weight": 0.05,
+    "holding": 16300,
+    "locked": 0,
+    "status": "正常"
+   },
+   {
+    "code": "600190",
+    "sector": "银行",
+    "price": 258.07,
+    "target_weight": 0.066,
+    "holding": 2200,
+    "locked": 1300,
+    "status": "停牌"
+   },
+   {
+    "code": "000917",
+    "sector": "医药",
+    "price": 174.84,
+    "target_weight": 0.0629,
+    "holding": 4500,
+    "locked": 2700,
+    "status": "正常"
+   },
+   {
+    "code": "601310",
+    "sector": "电子",
+    "price": 61.23,
+    "target_weight": 0.0763,
+    "holding": 12900,
+    "locked": 0,
+    "status": "正常"
+   },
+   {
+    "code": "002603",
+    "sector": "消费",
+    "price": 239.8,
+    "target_weight": 0.0854,
+    "holding": 4500,
+    "locked": 2700,
+    "status": "涨停"
+   },
+   {
+    "code": "002680",
+    "sector": "银行",
+    "price": 46.21,
+    "target_weight": 0.0394,
+    "holding": 5500,
+    "locked": 0,
+    "status": "停牌"
+   },
+   {
+    "code": "000088",
+    "sector": "医药",
+    "price": 304.97,
+    "target_weight": 0.035,
+    "holding": 1700,
+    "locked": 0,
+    "status": "正常"
+   },
+   {
+    "code": "002379",
+    "sector": "电子",
+    "price": 329.1,
+    "target_weight": 0.0885,
+    "holding": 4200,
+    "locked": 0,
+    "status": "正常"
+   },
+   {
+    "code": "002662",
+    "sector": "消费",
+    "price": 93.92,
+    "target_weight": 0.0618,
+    "holding": 10600,
+    "locked": 3100,
+    "status": "正常"
+   },
+   {
+    "code": "601414",
+    "sector": "银行",
+    "price": 5.04,
+    "target_weight": 0.0837,
+    "holding": 241700,
+    "locked": 0,
+    "status": "正常"
+   },
+   {
+    "code": "000675",
+    "sector": "医药",
+    "price": 76.91,
+    "target_weight": 0.0333,
+    "holding": 3300,
+    "locked": 1900,
+    "status": "正常"
+   },
+   {
+    "code": "601531",
+    "sector": "电子",
+    "price": 81.83,
+    "target_weight": 0.0626,
+    "holding": 6700,
+    "locked": 0,
+    "status": "正常"
+   }
+  ],
+  "sector_bounds": {
+   "银行": [
+    0.15,
+    0.32
+   ],
+   "医药": [
+    0.15,
+    0.32
+   ],
+   "电子": [
+    0.15,
+    0.32
+   ],
+   "消费": [
+    0.15,
+    0.32
+   ]
+  }
+ },
+ "optimum": 519638.239544,
+ "trades": {
+  "600022": -3700,
+  "601992": -8900,
+  "002566": 0,
+  "000948": 4100,
+  "600190": 0,
+  "000917": -100,
+  "601310": 2300,
+  "002603": -100,
+  "002680": 0,
+  "000088": -300,
+  "002379": -900,
+  "002662": -2600,
+  "601414": -38600,
+  "000675": 2000,
+  "601531": 2700
+ }
+}

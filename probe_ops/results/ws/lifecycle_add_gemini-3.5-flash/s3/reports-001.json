@@ -1,0 +1,38 @@
+{
+  "bucket": "reports-001",
+  "versioning": false,
+  "lifecycle": [
+    {
+      "id": "expire-logs",
+      "prefix": "logs/",
+      "days": 30
+    },
+    {
+      "id": "expire-scratch",
+      "prefix": "scratch/",
+      "days": 3
+    },
+    {
+      "id": "expire-tmp",
+      "prefix": "tmp/",
+      "days": 7
+    }
+  ],
+  "notifications": [
+    {
+      "prefix": "incoming/",
+      "queue": "ingest-q"
+    }
+  ],
+  "policy": {
+    "statements": [
+      {
+        "sid": "AllowRead",
+        "effect": "Allow",
+        "principal": "arn:role/reader",
+        "action": "s3:GetObject",
+        "resource": "reports-001/*"
+      }
+    ]
+  }
+}

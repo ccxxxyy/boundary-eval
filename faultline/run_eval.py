@@ -445,24 +445,6 @@ def main(argv: list[str] | None = None) -> int:
         group.get("provider", "openrouter") if isinstance(group, dict) else "openrouter"
     )
     client = build_client(group, provider, args.offline)
-    records: list[RunRecord] = []
-
-    for task in tasks:
-        for model in models:
-            for seed in seeds:
-                record = run_one(client, task, model, seed, repair_rounds, defaults)
-                records.append(record)
-                status = (
-                    "LOAD ERROR"
-                    if record.load_error
-                    else ("crash-safe" if record.crash_safe else "UNSAFE")
-                )
-                print(
-                    f"{record.task_id}  {record.label:<22} seed={seed}  "
-                    f"public={record.public_passed}/{record.public_total}  {status}"
-                )
-                sys.stdout.flush()
-
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = (
@@ -471,15 +453,42 @@ def main(argv: list[str] | None = None) -> int:
         else RESULTS_DIR / f"runs_{args.model_set}_{stamp}.jsonl"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
+    log_path = out.with_suffix(".log")
+    records: list[RunRecord] = []
+
+    def progress(message: str) -> None:
+        print(message, flush=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(message + "\n")
+
+    for task in tasks:
+        for model in models:
+            for seed in seeds:
+                progress(
+                    f"{task.task_id}  {model.get('label', model['id']):<22} "
+                    f"seed={seed}  calling..."
+                )
+                record = run_one(client, task, model, seed, repair_rounds, defaults)
+                records.append(record)
+                status = (
+                    "LOAD ERROR"
+                    if record.load_error
+                    else ("crash-safe" if record.crash_safe else "UNSAFE")
+                )
+                progress(
+                    f"{record.task_id}  {record.label:<22} seed={seed}  "
+                    f"public={record.public_passed}/{record.public_total}  {status}"
+                )
+
     with out.open("w", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(asdict(record), ensure_ascii=False) + "\n")
 
-    print()
-    print(summarise(records))
-    print(f"\nwrote {out}")
+    progress("")
+    progress(summarise(records))
+    progress(f"wrote {out}")
     if not args.offline:
-        print(f"spent ${client.spent_usd:.4f} this run")
+        progress(f"spent ${client.spent_usd:.4f} this run")
     return 0
 
 

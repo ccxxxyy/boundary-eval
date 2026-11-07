@@ -1,0 +1,16 @@
+{"model": "gemini-3.5-flash", "task": "t01_loss_year", "error": null, "ok": false, "got": "允许", "want": "禁止"}
+{"model": "gemini-3.5-flash", "task": "t02_sub5_first", "error": null, "ok": false, "got": "禁止", "want": "允许"}
+{"model": "gemini-3.5-flash", "task": "t03_over5_first", "error": null, "ok": true, "got": "禁止", "want": "禁止"}
+{"model": "gemini-3.5-flash", "task": "t04_ex_controller_one_day", "error": null, "ok": true, "got": "禁止", "want": "禁止"}
+{"model": "gemini-3.5-flash", "task": "t05_secondary_lot", "error": null, "ok": true, "got": "允许", "want": "允许"}
+{"model": "gemini-3.5-flash", "task": "t06_plan_then_break_nav", "error": null, "ok": false, "got": "禁止", "want": "允许"}
+{"model": "deepseek-v4.1-flash", "task": "t01_loss_year", "error": null, "ok": true, "got": "禁止", "want": "禁止"}
+{"model": "gemini-3.5-flash", "task": "t07_court_sale", "error": null, "ok": true, "got": "允许", "want": "允许"}
+{"model": "gemini-3.5-flash", "task": "t08_st_5000", "error": null, "ok": true, "got": "不触及", "want": "不触及"}
+{"model": "deepseek-v4.1-flash", "task": "t02_sub5_first", "error": null, "ok": false, "got": "禁止", "want": "允许"}
+{"model": "deepseek-v4.1-flash", "task": "t03_over5_first", "error": null, "ok": true, "got": "禁止", "want": "禁止"}
+{"model": "deepseek-v4.1-flash", "task": "t04_ex_controller_one_day", "error": null, "ok": true, "got": "禁止", "want": "禁止"}
+{"model": "deepseek-v4.1-flash", "task": "t05_secondary_lot", "error": null, "ok": true, "got": "允许", "want": "允许"}
+{"model": "deepseek-v4.1-flash", "task": "t06_plan_then_break_nav", "error": null, "ok": false, "got": "禁止", "want": "允许"}
+{"model": "deepseek-v4.1-flash", "task": "t07_court_sale", "error": null, "ok": false, "got": "禁止", "want": "允许"}
+{"model": "deepseek-v4.1-flash", "task": "t08_st_5000", "error": null, "ok": false, "got": "触及", "want": "不触及"}

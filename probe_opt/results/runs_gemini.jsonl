@@ -1,0 +1,10 @@
+{"seed": 1, "model": "gemini-3.5-flash", "mode": "direct", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 9725}
+{"seed": 1, "model": "gemini-3.5-flash", "mode": "code", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 9579}
+{"seed": 1, "model": "gemini-3.1-pro-preview", "mode": "direct", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 17854}
+{"seed": 1, "model": "gemini-3.1-pro-preview", "mode": "code", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 18897}
+{"seed": 2, "model": "gemini-3.5-flash", "mode": "direct", "feasible": true, "qualified": true, "gap": 0.0009635796415290006, "violations": [], "error": null, "completion_tokens": 19124}
+{"seed": 2, "model": "gemini-3.5-flash", "mode": "code", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 9292}
+{"seed": 2, "model": "gemini-3.1-pro-preview", "mode": "direct", "feasible": true, "qualified": true, "gap": 3.981206799082958e-06, "violations": [], "error": null, "completion_tokens": 39390}
+{"seed": 2, "model": "gemini-3.1-pro-preview", "mode": "code", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 20350}
+{"seed": 3, "model": "gemini-3.5-flash", "mode": "direct", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 8037}
+{"seed": 3, "model": "gemini-3.5-flash", "mode": "code", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 13599}

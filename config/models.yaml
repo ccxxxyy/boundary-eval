@@ -48,6 +48,23 @@ gemini-frontier:
       label: Gemini 3.5 Flash
       reasoning_effort: high
 
+# Alibaba Cloud Model Studio workspace (OpenAI-compatible). The workspace
+# URL is not a secret; the key lives in BAILIAN_API_KEY only.
+bailian:
+  provider: openai-compatible
+  base_url: https://ws-ce0jii45xzo24o4d.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+  env_var: BAILIAN_API_KEY
+  defaults:
+    max_tokens: 28000
+    repair_rounds: 0
+  models:
+    - id: qwen3.8-max
+      label: Qwen3.8 Max
+    - id: kimi-k3.1-pro
+      label: Kimi K3.1 Pro
+    - id: deepseek-v4.1-flash
+      label: DeepSeek V4.1 Flash
+
 # Frontier models on their own endpoints, all OpenAI-compatible. Listed
 # separately because each needs its own key, and because any one of them may
 # be the only family reachable from a given network.

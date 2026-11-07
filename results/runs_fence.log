@@ -1,0 +1,18 @@
+t03_at_least_once_ledger  gemini-3.1-pro-preview seed=1  calling...
+t03_at_least_once_ledger  gemini-3.1-pro-preview seed=1  public=2/2  crash-safe
+t03_at_least_once_ledger  gemini-3.5-flash       seed=1  calling...
+t03_at_least_once_ledger  gemini-3.5-flash       seed=1  public=2/2  crash-safe
+t06_fenced_payout  gemini-3.1-pro-preview seed=1  calling...
+t06_fenced_payout  gemini-3.1-pro-preview seed=1  public=5/5  crash-safe
+t06_fenced_payout  gemini-3.5-flash       seed=1  calling...
+t06_fenced_payout  gemini-3.5-flash       seed=1  public=5/5  crash-safe
+
+model                   first try  after repair  passed own tests but unsafe  unusable  cost
+--------------------------------------------------------------------------------------------
+gemini-3.1-pro-preview    2/2             2/2                        0/2           0    $0.0000
+gemini-3.5-flash          2/2             2/2                        0/2           0    $0.0000
+
+0 of 4 runs ended with code that is not crash-safe, after being shown its own failing tests and given a chance to fix them
+0 of 4 runs produced code that passed every public scenario and was still not crash-safe
+wrote D:\PythonProjects\boundary-eval\results\runs_fence.jsonl
+spent $0.0000 this run

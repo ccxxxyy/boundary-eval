@@ -1,0 +1,3 @@
+{"code": "600519", "model": "deepseek-v4.1-flash", "error": null, "results": {"t1_parent_capex": {"got": 3104346428.46, "want": 3104346428.46, "ok": true}, "t2_total_revenue": {"got": 172054171890.91, "want": 172054171890.91, "ok": true}}}
+{"code": "000333", "model": "deepseek-v4.1-flash", "error": null, "results": {"t1_parent_capex": {"got": 386032000, "want": 386032000.0, "ok": true}, "t2_total_revenue": {"got": 458502407000, "want": 458502407000.0, "ok": true}}}
+{"code": "300750", "model": "deepseek-v4.1-flash", "error": null, "results": {"t1_parent_capex": {"got": 2056300000, "want": 2056300000.0, "ok": true}, "t2_total_revenue": {"got": 423701834000, "want": 423701834000.0, "ok": true}}}

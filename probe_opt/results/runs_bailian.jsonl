@@ -1,0 +1,3 @@
+{"seed": 1, "model": "deepseek-v4.1-flash", "mode": "direct", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 14051}
+{"seed": 1, "model": "deepseek-v4.1-flash", "mode": "code", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 19498}
+{"seed": 1, "model": "kimi-k3.1-pro", "mode": "direct", "feasible": true, "qualified": true, "gap": 0.0, "violations": [], "error": null, "completion_tokens": 12057}

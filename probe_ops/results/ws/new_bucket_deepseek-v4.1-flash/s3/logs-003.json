@@ -1,0 +1,15 @@
+{
+  "bucket": "logs-003",
+  "versioning": false,
+  "lifecycle": [
+    {
+      "id": "expire-30",
+      "prefix": "",
+      "days": 30
+    }
+  ],
+  "notifications": [],
+  "policy": {
+    "statements": []
+  }
+}

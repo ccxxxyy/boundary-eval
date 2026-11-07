@@ -1,4 +1,4 @@
-from __future__ import annotations
+from faultline.api import DurableStore, LegacyTransferAPI, TransferTimeout
 
 
 def send_payout(
@@ -16,32 +16,38 @@ def send_payout(
     """
     state_key = f"payout:{payout_id}:state"
 
-    while True:
-        current = store.get(state_key)
-
-        if current == "completed":
-            return "completed"
-
-        if current == "needs_review":
-            return "needs_review"
-
-        if current is None:
-            token = f"in_progress:{new_id()}"
-            if store.compare_and_set(state_key, None, token):
-                try:
-                    legacy.transfer(amount_cents)
-                except Exception:
-                    store.put(state_key, "needs_review")
-                    return "needs_review"
-
-                store.put(state_key, "completed")
-                return "completed"
-            continue
-
-        store.compare_and_set(state_key, current, "needs_review")
-        final_state = store.get(state_key)
-        if final_state == "completed":
-            return "completed"
-        if final_state != "needs_review":
-            store.put(state_key, "needs_review")
+    # Fast path for already finished payouts
+    state = store.get(state_key)
+    if state == "completed":
+        return "completed"
+    if state == "needs_review":
         return "needs_review"
+
+    # Atomically claim the right to initiate the transfer.
+    # Because state_key is never reset to None, this CAS can succeed at most once.
+    if store.compare_and_set(state_key, None, "initiated"):
+        try:
+            legacy.transfer(amount_cents)
+        except Exception:
+            store.put(state_key, "needs_review")
+            return "needs_review"
+        else:
+            store.put(state_key, "completed")
+            return "completed"
+
+    # If CAS failed, another worker claimed or completed the payout.
+    state = store.get(state_key)
+    if state == "completed":
+        return "completed"
+    if state == "needs_review":
+        return "needs_review"
+
+    # The payout is in an unconfirmed "initiated" state from another (or crashed) worker.
+    # Safely transition state to "needs_review" so a terminal state is durably recorded.
+    if state is not None:
+        store.compare_and_set(state_key, state, "needs_review")
+
+    final_state = store.get(state_key)
+    if final_state == "completed":
+        return "completed"
+    return "needs_review"

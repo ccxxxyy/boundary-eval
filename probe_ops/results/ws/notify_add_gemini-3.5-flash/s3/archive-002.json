@@ -1,0 +1,15 @@
+{
+  "bucket": "archive-002",
+  "versioning": true,
+  "lifecycle": [
+    {
+      "id": "glacier",
+      "prefix": "old/",
+      "days": 365
+    }
+  ],
+  "notifications": [],
+  "policy": {
+    "statements": []
+  }
+}
